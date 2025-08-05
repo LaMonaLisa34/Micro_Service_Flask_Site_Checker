@@ -25,7 +25,6 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -35,21 +34,22 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.MONITORING_SSH_KEY }}
 
-      - name: Add server to known_hosts
+      - name: Add servers to known_hosts
         run: |
           ssh-keyscan -p ${{ secrets.MONITORING_SSH_PORT }} ${{ secrets.MONITORING_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p 22 ${{ secrets.IP_VM }} >> ~/.ssh/known_hosts
 
-      - name: Deploy via server rebond to VM interne
+      - name: Deploy via SSH jump (rebond)
         env:
           MONITORING_HOST: ${{ secrets.MONITORING_HOST }}
           MONITORING_SSH_PORT: ${{ secrets.MONITORING_SSH_PORT }}
           MONITORING_USER: ${{ secrets.MONITORING_USER }}
-          VM_INTERNAL_IP: ${{ secrets.IP_VM }} 
+          VM_INTERNAL_IP: ${{ secrets.IP_VM }}
         run: |
-          ssh -t -p $MONITORING_SSH_PORT -o StrictHostKeyChecking=no $MONITORING_USER@$MONITORING_HOST << EOF
-          ssh -t -o StrictHostKeyChecking=no admin_mona@$VM_INTERNAL_IP << EOFF
-          cd /home/admin_mona/site_checker
-          docker compose down || true
-          docker compose up -d --build
-          EOFF
+          ssh -t -p $MONITORING_SSH_PORT -o StrictHostKeyChecking=no $MONITORING_USER@$MONITORING_HOST << 'EOF'
+            ssh -t -o StrictHostKeyChecking=no admin_mona@$VM_INTERNAL_IP << 'EOFF'
+              cd /home/admin_mona/site_checker
+              docker compose down || true
+              docker compose up -d --build
+            EOFF
           EOF
