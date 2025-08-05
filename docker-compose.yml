@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  site_checker:
+    build: .
+    container_name: site_checker_flask
+    restart: always
+    ports:
+      - "5050:5000"  # Port 5050 (VM) vers 5000 (conteneur Flask)
+    env_file:
+      - .env
