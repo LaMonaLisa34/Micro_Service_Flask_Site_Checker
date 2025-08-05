@@ -6,10 +6,8 @@ on:
       - main
 
 jobs:
-  deploy:
-    name: Deploy Flask Microservice to VM
+  build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -24,26 +22,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Copy files to server host (IP publique)
-        uses: appleboy/scp-action@v0.1.4
-        with:
-          host: ${{ secrets.MONITORING_HOST }}
-          port: ${{ secrets.MONITORING_SSH_PORT }}
-          username: ${{ secrets.MONITORING_USER }}
-          key: ${{ secrets.MONITORING_SSH_KEY }}
-          source: "."
-          target: "/home/admin_mona/site_checker"
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
 
-      - name: SSH - Deploy on VM via server host (rebond SSH)
-        uses: appleboy/ssh-action@v1.0.0
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.MONITORING_HOST }}
-          port: ${{ secrets.MONITORING_SSH_PORT }}
-          username: ${{ secrets.MONITORING_USER }}
-          key: ${{ secrets.MONITORING_SSH_KEY }}
-          script: |
-            ssh -o StrictHostKeyChecking=no admin_mona@192.168.1.20 << 'EOF'
+          ssh-private-key: ${{ secrets.MONITORING_SSH_KEY }}
+
+      - name: Add server to known_hosts
+        run: |
+          ssh-keyscan -p ${{ secrets.MONITORING_SSH_PORT }} ${{ secrets.MONITORING_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via server rebond to VM interne
+        env:
+          MONITORING_HOST: ${{ secrets.MONITORING_HOST }}
+          MONITORING_SSH_PORT: ${{ secrets.MONITORING_SSH_PORT }}
+          MONITORING_USER: ${{ secrets.MONITORING_USER }}
+          VM_INTERNAL_IP: ${{ secrets.IP_VM }} 
+        run: |
+          ssh -p $MONITORING_SSH_PORT -o StrictHostKeyChecking=no $MONITORING_USER@$MONITORING_HOST << EOF
+            ssh -o StrictHostKeyChecking=no admin_mona@$VM_INTERNAL_IP << EOFF
               cd /home/admin_mona/site_checker
               docker compose down || true
               docker compose up -d --build
-            EOF
+            EOFF
+          EOF
