@@ -1,0 +1,30 @@
+# Environnement virtuel
+.venv/
+venv/
+ENV/
+env/
+
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Dossiers temporaires ou de cache
+*.log
+*.tmp
+*.swp
+.cache/
+*.egg-info/
+dist/
+build/
+
+# Variables d'environnement
+.env
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
