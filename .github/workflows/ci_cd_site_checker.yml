@@ -24,22 +24,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Copy files to VM
+      - name: Copy files to server host (IP publique)
         uses: appleboy/scp-action@v0.1.4
         with:
           host: ${{ secrets.MONITORING_HOST }}
+          port: ${{ secrets.MONITORING_SSH_PORT }}  
           username: ${{ secrets.MONITORING_USER }}
           key: ${{ secrets.MONITORING_SSH_KEY }}
           source: "."
           target: "/home/admin_mona/site_checker"
 
-      - name: SSH - Restart microservice
+      - name: SSH - Deploy on VM via server host (rebond SSH)
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.MONITORING_HOST }}
+          port: ${{ secrets.MONITORING_SSH_PORT }}
           username: ${{ secrets.MONITORING_USER }}
           key: ${{ secrets.MONITORING_SSH_KEY }}
           script: |
+            ssh -o StrictHostKeyChecking=no admin_mona@192.168.1.20 << 'EOF'
             cd /home/admin_mona/site_checker
             docker compose down || true
             docker compose up -d --build
+            EOF
