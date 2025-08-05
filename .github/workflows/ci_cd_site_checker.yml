@@ -46,8 +46,8 @@ jobs:
           MONITORING_USER: ${{ secrets.MONITORING_USER }}
           VM_INTERNAL_IP: ${{ secrets.IP_VM }}
         run: |
-          ssh -t -p $MONITORING_SSH_PORT -o StrictHostKeyChecking=no $MONITORING_USER@$MONITORING_HOST << 'EOF'
-            ssh -t -o StrictHostKeyChecking=no admin_mona@$VM_INTERNAL_IP << 'EOFF'
+          ssh -t -p $MONITORING_SSH_PORT -o StrictHostKeyChecking=no $MONITORING_USER@$MONITORING_HOST << EOF
+            ssh -t -o StrictHostKeyChecking=no admin_mona@$IP_VM << EOFF
               cd /home/admin_mona/site_checker
               docker compose down || true
               docker compose up -d --build
