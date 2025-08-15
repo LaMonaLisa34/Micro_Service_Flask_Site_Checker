@@ -28,7 +28,3 @@ build/
 # OS
 .DS_Store
 Thumbs.db
-
-# Clés SSH
-cle_ci_cd_monitoring
-cle_ci_cd_monitoring.pub

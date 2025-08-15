@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -22,50 +22,38 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-  deploy:
+  deploy-prod:
     needs: build
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup SSH agent
+      - name: Setup SSH agent (Prod)
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.SSH_KEY }}
+          ssh-private-key: ${{ secrets.SSH_KEY_PROD }}
 
-      - name: Add VM to known_hosts (good port)
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_SSH_PORT: ${{ secrets.VM_SSH_PORT }}
+      - name: Add host to known_hosts (Prod)
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -p "$VM_SSH_PORT" "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_HOST_PROD }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Rsync repository to VM
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_SSH_PORT: ${{ secrets.VM_SSH_PORT }}
-          VM_TARGET_DIR: ${{ secrets.VM_TARGET_DIR }}
+      - name: Sanity check SSH (Prod)
         run: |
-          # --delete pour garder la cible en miroir du repo
-          rsync -az --delete \
-            -e "ssh -p $VM_SSH_PORT -o StrictHostKeyChecking=yes" \
-            ./ "$VM_USER@$VM_HOST:$VM_TARGET_DIR"
+          ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" -o BatchMode=yes "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" true
 
-      - name: Deploy with Docker Compose
-        env:
-          VM_HOST: ${{ secrets.VM_HOST }}
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_SSH_PORT: ${{ secrets.VM_SSH_PORT }}
-          VM_TARGET_DIR: ${{ secrets.VM_TARGET_DIR }}
+      - name: Rsync to Prod
         run: |
-          ssh -p "$VM_SSH_PORT" "$VM_USER@$VM_HOST" << 'EOF'
+          rsync -az --delete -e "ssh -p ${{ secrets.VM_SSH_PORT_PROD }}" \
+            ./ "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}:${{ secrets.VM_TARGET_DIR_PROD }}"
+
+      - name: Compose up (Prod)
+        run: |
+          ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" << 'EOF'
           set -euo pipefail
-          cd "$VM_TARGET_DIR"
-
-          # Choisir la bonne commande compose (V2 ou V1)
+          cd "${{ secrets.VM_TARGET_DIR_PROD }}"
           if docker compose version >/dev/null 2>&1; then
             COMPOSE_CMD="docker compose"
           elif docker-compose version >/dev/null 2>&1; then
@@ -74,7 +62,6 @@ jobs:
             echo "Erreur: ni 'docker compose' ni 'docker-compose' n'est installé." >&2
             exit 1
           fi
-
           $COMPOSE_CMD down || true
           $COMPOSE_CMD up -d --build
           EOF
