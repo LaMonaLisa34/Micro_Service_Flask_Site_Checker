@@ -44,73 +44,45 @@ jobs:
         run: |
           ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" -o BatchMode=yes "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" true
 
-      - name: Rsync to Prod
+      - name: Rsync repository to Prod (exclude .env)
         run: |
-          rsync -az --delete -e "ssh -p ${{ secrets.VM_SSH_PORT_PROD }}" \
+          rsync -az --delete --exclude ".env" \
+            -e "ssh -p ${{ secrets.VM_SSH_PORT_PROD }}" \
             ./ "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}:${{ secrets.VM_TARGET_DIR_PROD }}"
 
-      - name: Deploy and start services (Prod)
+      - name: Create .env on server (from secret ENV_PROD_FILE)
         run: |
           ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" << 'EOF'
           set -euo pipefail
           cd "${{ secrets.VM_TARGET_DIR_PROD }}"
-          
-          # Create .env file with secrets
-          echo "Creating .env file..."
-          cat > .env << 'ENVEOF'
-          # Flask Configuration
-          FLASK_ENV=production
-          FLASK_DEBUG=false
-          
-          # Site monitoring configuration
-          SITE_TO_CHECK=${{ secrets.SITE_TO_CHECK }}
-          
-          # Add other environment variables here if needed
-          # DATABASE_URL=${{ secrets.DATABASE_URL }}
-          # SECRET_KEY=${{ secrets.SECRET_KEY }}
-          ENVEOF
-          
-          # Alternative: Use direct permissions fix
-          if ! docker ps >/dev/null 2>&1; then
-            echo "Fixing Docker socket permissions..."
-            chmod 666 /var/run/docker.sock 2>/dev/null || true
-          fi
-          
-          # Detect Docker Compose command
+          # Crée/écrase .env avec le contenu du secret
+          cat > .env << 'EENV'
+          ${{ secrets.ENV_PROD_FILE }}
+          EENV
+          chmod 600 .env
+          EOF
+
+      - name: Remove obsolete 'version:' key from docker-compose.yml (optional)
+        run: |
+          ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" \
+            "sed -i '/^version:/d' '${{ secrets.VM_TARGET_DIR_PROD }}/docker-compose.yml' || true"
+
+      - name: Docker Compose up (Prod)
+        run: |
+          ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" << 'EOF'
+          set -euo pipefail
+          cd "${{ secrets.VM_TARGET_DIR_PROD }}"
+
+          # Détecte compose v2 ou v1
           if docker compose version >/dev/null 2>&1; then
             COMPOSE_CMD="docker compose"
           elif docker-compose version >/dev/null 2>&1; then
             COMPOSE_CMD="docker-compose"
           else
-            echo "Erreur: ni docker compose ni docker-compose n'est installé." >&2
+            echo "Erreur: ni 'docker compose' ni 'docker-compose' n'est installé." >&2
             exit 1
           fi
-          
-          echo "Utilisation de Docker Compose: $COMPOSE_CMD"
-          
-          # Stop existing containers gracefully
-          echo "Arrêt des conteneurs existants..."
-          $COMPOSE_CMD down --timeout 30 || true
-          
-          # Remove unused images to free up space
-          echo "Nettoyage des images inutilisées..."
-          docker image prune -f || true
-          
-          # Start services
-          echo "Démarrage des services..."
-          $COMPOSE_CMD up -d --build --remove-orphans
-          
-          # Wait a moment for services to start
-          echo "Attente du démarrage des services..."
-          sleep 10
-          
-          # Verify deployment
-          echo "Vérification du déploiement:"
-          $COMPOSE_CMD ps
-          
-          # Show recent logs
-          echo "Logs récents:"
-          $COMPOSE_CMD logs --tail=20
-          
-          echo "Déploiement terminé avec succès!"
+
+          $COMPOSE_CMD down || true
+          $COMPOSE_CMD up -d --build
           EOF
