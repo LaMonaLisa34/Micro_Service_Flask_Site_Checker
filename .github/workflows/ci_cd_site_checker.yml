@@ -55,20 +55,9 @@ jobs:
           set -euo pipefail
           cd "${{ secrets.VM_TARGET_DIR_PROD }}"
           
-          # Force application of docker group membership
-          if ! docker ps >/dev/null 2>&1; then
-            echo "Applying docker group permissions..."
-            newgrp docker << 'DOCKER_EOF' || true
-          
-      - name: Deploy and start services (Prod)
-        run: |
-          ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" << 'EOF'
-          set -euo pipefail
-          cd "${{ secrets.VM_TARGET_DIR_PROD }}"
-          
           # Create .env file with secrets
           echo "Creating .env file..."
-          cat > .env << EOL
+          cat > .env << 'ENVEOF'
           # Flask Configuration
           FLASK_ENV=production
           FLASK_DEBUG=false
@@ -79,7 +68,7 @@ jobs:
           # Add other environment variables here if needed
           # DATABASE_URL=${{ secrets.DATABASE_URL }}
           # SECRET_KEY=${{ secrets.SECRET_KEY }}
-          EOL
+          ENVEOF
           
           # Use sudo for Docker commands (reliable solution)
           COMPOSE_CMD="sudo docker compose"
@@ -111,5 +100,4 @@ jobs:
           $COMPOSE_CMD logs --tail=20
           
           echo "Déploiement terminé avec succès!"
-          EOF
           EOF
