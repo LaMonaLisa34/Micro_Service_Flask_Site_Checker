@@ -1,1 +1,110 @@
-https://chevauxdumonde.com/
+name: CI/CD Monitoring Flask Site Checker
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+  deploy-prod:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH agent (Prod)
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY_PROD }}
+
+      - name: Add host to known_hosts (Prod)
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_HOST_PROD }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Sanity check SSH (Prod)
+        run: |
+          ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" -o BatchMode=yes "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" true
+
+      - name: Rsync to Prod
+        run: |
+          rsync -az --delete -e "ssh -p ${{ secrets.VM_SSH_PORT_PROD }}" \
+            ./ "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}:${{ secrets.VM_TARGET_DIR_PROD }}"
+
+      - name: Deploy and start services (Prod)
+        run: |
+          ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" << 'EOF'
+          set -euo pipefail
+          cd "${{ secrets.VM_TARGET_DIR_PROD }}"
+          
+          # Create .env file if it doesn't exist
+          if [ ! -f .env ]; then
+            echo "Creating .env file..."
+            cat > .env << EOL
+          # Flask Configuration
+          FLASK_ENV=production
+          FLASK_DEBUG=false
+          
+          # Add your environment variables here
+          # DATABASE_URL=your_database_url
+          # SECRET_KEY=your_secret_key
+          # API_KEY=your_api_key
+          EOL
+          fi
+          
+          # Detect Docker Compose command
+          if docker compose version >/dev/null 2>&1; then
+            COMPOSE_CMD="docker compose"
+          elif docker-compose version >/dev/null 2>&1; then
+            COMPOSE_CMD="docker-compose"
+          else
+            echo "Erreur: ni 'docker compose' ni 'docker-compose' n'est installé." >&2
+            exit 1
+          fi
+          
+          echo "Utilisation de Docker Compose: $COMPOSE_CMD"
+          
+          # Stop existing containers gracefully
+          echo "Arrêt des conteneurs existants..."
+          $COMPOSE_CMD down --timeout 30 || true
+          
+          # Remove unused images to free up space
+          echo "Nettoyage des images inutilisées..."
+          docker image prune -f || true
+          
+          # Start services
+          echo "Démarrage des services..."
+          $COMPOSE_CMD up -d --build --remove-orphans
+          
+          # Wait a moment for services to start
+          echo "Attente du démarrage des services..."
+          sleep 10
+          
+          # Verify deployment
+          echo "Vérification du déploiement:"
+          $COMPOSE_CMD ps
+          
+          # Show recent logs
+          echo "Logs récents:"
+          $COMPOSE_CMD logs --tail=20
+          
+          echo "Déploiement terminé avec succès!"
+          EOF
