@@ -55,7 +55,6 @@ jobs:
           ssh -p "${{ secrets.VM_SSH_PORT_PROD }}" "${{ secrets.VM_USER_PROD }}@${{ secrets.VM_HOST_PROD }}" << 'EOF'
           set -euo pipefail
           cd "${{ secrets.VM_TARGET_DIR_PROD }}"
-          # Crée/écrase .env avec le contenu du secret
           cat > .env << 'EENV'
           ${{ secrets.ENV_PROD_FILE }}
           EENV
