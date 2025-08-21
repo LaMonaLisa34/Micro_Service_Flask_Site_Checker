@@ -1,7 +1,5 @@
 # Site Checker – Microservice Flask
 
-
-
 Ce microservice permet de **vérifier si un site web est atteignable** via une requête HTTP.  
 Il est développé avec **Flask** et prévu pour s’intégrer dans une architecture en microservices (Kafka, Prometheus, etc.).
 
