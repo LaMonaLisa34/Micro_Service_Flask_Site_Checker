@@ -1,11 +1,9 @@
 from flask import Blueprint, jsonify
 import os
 import requests
-from dotenv import load_dotenv
 from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from flask import Response
 
-from dotenv import load_dotenv
 
 main = Blueprint('main', __name__)
 
